@@ -6,6 +6,11 @@ python 01_download.py
 
 #### 2. Label images
 
+Look through the downloaded images in `images/` and pick which ones you want to annotate
+and use as training data.
+Put the remaining images in `unused-images/`.
+These can be used for testing.
+
 Run `labelImg`,
 ```
 labelImg

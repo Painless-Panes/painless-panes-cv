@@ -14,7 +14,16 @@ pillow = "^10.0.1"
 bs4 = "^0.0.1"
 lxml = "^4.9.3"
 labelimg = "^1.8.6"
+torch = {version = "^2.0.1+cpu", source = "pytorch-cpu-src"}
+torchvision = {version = "^0.15.2+cpu", source = "pytorch-cpu-src"}
+torchaudio = {version = "^2.0.2+cpu", source = "pytorch-cpu-src"}
+ultralytics = "^8.0.180"
 
+
+[[tool.poetry.source]]
+name = "pytorch-cpu-src"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]
