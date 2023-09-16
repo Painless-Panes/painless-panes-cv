@@ -1,5 +1,6 @@
 #### 1. Download images
 
+Run the image download scrip:
 ```
 python 01_download.py
 ```

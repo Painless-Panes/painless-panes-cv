@@ -21,3 +21,10 @@ nc: 3
 names: ["class-name-1", "class-name-2", "class-name-3"]
 ```
 6. Optionally, if you have unused images in `$DG/unused-images`, you can copy those into a `test/` directory here in order to test the model after training.
+
+#### 1. Train the model
+
+Run the training script:
+```
+python 01_train.py
+```
