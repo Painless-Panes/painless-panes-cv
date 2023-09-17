@@ -28,3 +28,10 @@ Run the training script:
 ```
 python 01_train.py
 ```
+
+#### 2. Test the model
+
+Test the model by running the prediction script:
+```
+python 02_predict.py
+```

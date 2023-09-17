@@ -1,0 +1,6 @@
+train: /home/avcopan/Documents/Code/prime/painless-panes-cv/02-model-training/train
+val: /home/avcopan/Documents/Code/prime/painless-panes-cv/02-model-training/val
+
+nc: 3
+
+names: ["window-shuttered", "window", "window-outside"]
