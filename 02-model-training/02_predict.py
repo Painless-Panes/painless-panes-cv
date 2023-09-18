@@ -1,9 +1,8 @@
 from ultralytics import YOLO
 
-model = YOLO("window_model.pt")
+model = YOLO("window-model-nano.pt")
 
-# filename = "q7kuAkPnuupHrA=="
-filename = "uEv9z6sFD80aXQ=="
+filename = "VN5b_loh2zYOww=="
 results = model(
     f"test/{filename}.jpg",
     show=True,

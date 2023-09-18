@@ -6,10 +6,10 @@ Let `$DG` be the data generation directory, which in this repo is
 
 1. Move the `classes.txt` file from `$DG` into this directory.
 2. Create folders `train/` and `val/` here.
-3. Move the last six images and labels from `$DG/images/` and `$DG/labels/` into
-`val/images/` and `val/labels/`, making sure the labels match.
-4. Move the `$DG/images/` and `$DG/labels/` directories with the remaining images and
-labels into the `train/` directory here.
+3. Create `val/images/` and `val/labels/` subfolders and move the last six images and
+labels from `$DG/images/` and `$DG/labels/` into them, making sure the labels match.
+4. Move the `$DG/images/` and `$DG/labels/` subfolders with the remaining images and
+labels into the `train/` directory.
 5. Create an `annotated_data.yaml` file here and add the following information to it.
 (You can find the number of classes (`nc`) and their names in order (`names`) in the `classes.txt` file.)
 ```

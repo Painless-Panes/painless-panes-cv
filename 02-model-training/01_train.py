@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-model = YOLO('yolov8n.pt')  # `n` for "nano", the smallest model
+model = YOLO('yolov8s.pt')
 
 model.train(
     data='annotated_data.yaml',
