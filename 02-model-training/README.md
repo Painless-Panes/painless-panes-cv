@@ -2,7 +2,7 @@
 
 Before getting started, you need to organize your annotated data from the data generation step as follows.
 Let `$DG` be the data generation directory, which in this repo is
-`../01-data-generation/labels`, and follow these steps:
+`../01-data-generation/`, and follow these steps:
 
 1. Move the `classes.txt` file from `$DG` into this directory.
 2. Create folders `train/` and `val/` here.
@@ -31,7 +31,9 @@ python 01_train.py
 
 #### 2. Test the model
 
-Test the model by running the prediction script:
+The model weights are stored in `runs/train/weights/best.pt`. Copy that file into this directory and rename it `custom-model.pt`.
+
+You can then test the model by running the prediction script:
 ```
 python 02_predict.py
 ```
