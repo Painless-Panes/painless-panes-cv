@@ -8,6 +8,8 @@ Also, copy over the `classes.txt` file from `../02-model-training/`.
 
 Rename it `custom-model.pt` if you haven't already.
 
-#### 1. Process the Image
+#### 1. Run the Measurement Script!
 
-
+```
+python 01_measure-windows.py
+```

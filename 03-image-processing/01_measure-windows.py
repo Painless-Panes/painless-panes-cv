@@ -1,8 +1,12 @@
 import cv2 as cv
+import numpy as np
 import ultralytics as ul
 
-COLOR = (0, 255, 0)  # annotation color
+BLUE = (255, 0, 0)  # annotation color
+GREEN = (0, 255, 0)  # annotation color
 FONT = cv.FONT_HERSHEY_SIMPLEX
+ARUCO_PARAMS = cv.aruco.DetectorParameters()
+ARUCO_DICT = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50)
 
 model = ul.YOLO("custom-model.pt")
 class_names = open("classes.txt").read().strip().splitlines()
@@ -16,11 +20,20 @@ width = int(width * 800 / height)
 height = int(height * 800 / height)
 image = cv.resize(image, (width, height), interpolation=cv.INTER_LINEAR)
 
+# If an Aruco marker can be detected, get the pixel distance ratio
+px2in = 1.0
+corners, _, _ = cv.aruco.detectMarkers(image, ARUCO_DICT, parameters=ARUCO_PARAMS)
+if corners:
+    cv.polylines(image, np.intp(corners), True, BLUE, 2)
+    perimeter = cv.arcLength(np.intp(corners[0]), True)
+    print("pixel perimeter:", perimeter)
+    px2in = 23.622 / perimeter
+    print("pixels per inch:", 1.0 / px2in)
+
 # Convert RGB => BGR for prediction
 bgr_image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
 results = model.predict(bgr_image, conf=0.5, project=".")
 
-image_out = image.copy()
 for result in results:
     for box in result.boxes:
         class_id = int(box.cls)
@@ -29,11 +42,14 @@ for result in results:
         x0, y0, x1, y1 = map(int, box.xyxy[0])
         print(x0, y0, x1, y1)
 
-        cv.rectangle(image_out, (x0, y0), (x1, y1), COLOR, 2)
-        cv.putText(image_out, class_name, (x0, y0 - 5), FONT, 1, COLOR, 2)
-        cv.putText(image_out, f"{conf:.2f}", (x0, y1 - 5), FONT, 1, COLOR, 2)
+        w = (x1 - x0) * px2in
+        h = (y1 - y0) * px2in
 
-cv.imshow("Annotated", image_out)
+        cv.rectangle(image, (x0, y0), (x1, y1), GREEN, 2)
+        cv.putText(image, f"{class_name} {conf:.2f}", (x0, y0 - 5), FONT, 1, GREEN, 2)
+        cv.putText(image, f"{w:.0f}x{h:.0f}", (x0, y1 - 5), FONT, 1, GREEN, 2)
+
+cv.imshow("Annotated", image)
 cv.imwrite(f"annotated/{filename}_annotated.jpg", image)
 
 # Stop running when we close the window
