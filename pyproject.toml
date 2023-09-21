@@ -6,7 +6,7 @@ authors = ["Andreas Copan <avcopan@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.12"
 icrawler = "^0.6.7"
 six = "^1.16.0"
 requests = "^2.31.0"
@@ -20,6 +20,14 @@ torchaudio = {version = "^2.0.2+cpu", source = "pytorch-cpu-src"}
 ultralytics = "^8.0.180"
 opencv-python = "^4.8.0.76"
 opencv-contrib-python = "^4.8.0.76"
+tensorflow-cpu = "^2.13.0"
+onnx = "^1.14.1"
+onnx2tf = "^1.16.29"
+sng4onnx = "^1.0.1"
+onnxsim = "^0.4.33"
+tflite-support = "^0.4.4"
+onnxruntime = "^1.16.0"
+tensorflowjs = "^4.11.0"
 
 
 [[tool.poetry.source]]

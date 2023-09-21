@@ -1,0 +1,15 @@
+description: Ultralytics custom-model model trained on annotated_data.yaml
+author: Ultralytics
+license: AGPL-3.0 https://ultralytics.com/license
+date: '2023-09-20T20:53:49.727029'
+version: 8.0.180
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: window-shuttered
+  1: window
+  2: window-outside
