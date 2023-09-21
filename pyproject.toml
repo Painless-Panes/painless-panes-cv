@@ -30,6 +30,7 @@ onnxruntime = "^1.16.0"
 tensorflowjs = "^4.11.0"
 flask = "^2.3.3"
 python-dotenv = "^1.0.0"
+gunicorn = "^21.2.0"
 
 
 [[tool.poetry.source]]
