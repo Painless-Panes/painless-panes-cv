@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "painless-panes-cv"
+name = "painless-panes"
 version = "0.1.0"
 description = ""
 authors = ["Andreas Copan <avcopan@gmail.com>"]
@@ -31,6 +31,7 @@ tensorflowjs = "^4.11.0"
 flask = "^2.3.3"
 python-dotenv = "^1.0.0"
 gunicorn = "^21.2.0"
+flask-cors = "^4.0.0"
 
 
 [[tool.poetry.source]]

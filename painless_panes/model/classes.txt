@@ -1,0 +1,3 @@
+window-shuttered
+window
+window-outside
