@@ -25,15 +25,17 @@ def measure_window():
     file_storage.save(bytes_io)
 
     # Decode the image as an OpenCV image object
-    image = util.opencv_image_array_from_stream(bytes_io)
-    aruco_corners = cv.find_aruco_marker(image, annotate=True)
-    print("corners:", aruco_corners)
+    image = util.opencv_image_array_from_bytes_io(bytes_io)
+    annotated_image = image.copy()
+    aruco_corners = cv.find_aruco_marker(annotated_image, annotate=True)
+    print("Aruco corners:", aruco_corners)
+
     import cv2
-    cv2.imwrite("test.jpg", image)
+    cv2.imwrite("test.jpg", annotated_image)
 
     # Send the BytesIO object as a file, putting measurements in the headers
-    bytes_io.seek(0)
-    res = flask.send_file(bytes_io, mimetype="image/jpeg")
+    annotated_bytes_io = util.bytes_io_from_opencv_image_array(annotated_image)
+    res = flask.send_file(annotated_bytes_io, mimetype="image/jpeg")
     res.headers.add("width", 12)
     res.headers.add("height", 34)
 

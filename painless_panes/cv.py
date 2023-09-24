@@ -38,7 +38,6 @@ def find_aruco_marker(
     corners = tuple(np.intp(corners[0])) if corners else None
 
     # If requested, annotate the image as a side-effect
-    print("CORNERS:", corners)
     if annotate and corners:
         cv2.polylines(image, np.intp([corners]), True, BLUE, 2)
 
