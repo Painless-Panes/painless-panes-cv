@@ -11,6 +11,11 @@ api = flask.Flask(__name__)
 flask_cors.CORS(api)
 
 
+@api.route("/cv/api/ping", methods=["GET"])
+def ping():
+    return {"contents": "pong"}, 200
+
+
 @api.route("/cv/api/window/measure", methods=["POST"])
 def measure_window():
     # Get the FileStorage object
