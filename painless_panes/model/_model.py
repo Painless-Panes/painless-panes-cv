@@ -1,7 +1,4 @@
 """Employs YOLO v8 model using ONNX runtime
-
-See https://github.com/ultralytics/ultralytics/blob/main/examples/YOLOv8-OpenCV-ONNX-Python/main.py
-and https://stackoverflow.com/a/77078624
 """
 import cv2
 import numpy
@@ -12,23 +9,27 @@ MODEL_FILE_PATH = util.file_path("painless_panes.model", "model.onnx")
 CLASSES = util.file_contents("painless_panes.model", "classes.txt").splitlines()
 
 
-def draw_bounding_box(img, class_id, confidence, x0, y0, x1, y1):
-    label = f"{CLASSES[class_id]} ({confidence:.2f})"
-    color = (0, 0, 255)
-    cv2.rectangle(img, (x0, y0), (x1, y1), color, 2)
-    cv2.putText(img, label, (x0 - 10, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+def get_detections(image, conf=0.25):
+    """Find the YOLO model detections in an image
 
-
-def get_detections(image):
-    """_summary_
-
-    Pre- and post-processing code copied from
+    Pre- and post-processing steps copied from
     https://github.com/ultralytics/ultralytics/blob/main/examples/YOLOv8-OpenCV-ONNX-Python/main.py
+    with modifications
 
-    :param original_image: _description_
-    :type original_image: _type_
-    :return: _description_
-    :rtype: _type_
+    :param image: The image
+    :type image: numpy.ndarray
+    :param conf: Confidence threshold, defaults to 0.25
+    :type conf: float, optional
+    :returns: The list of detections, in the form:
+        [
+            {
+                "class_name": <string>,   # The object class name
+                "confidence": <float>,    # The % confidence in the detection
+                "bounding_box": <tuple>,  # The bounding box in xyxy format
+            },
+            ...
+        ]
+    :rtype: List[dict]
     """
     model: cv2.dnn.Net = cv2.dnn.readNetFromONNX(MODEL_FILE_PATH)
     height, width, _ = image.shape
@@ -41,59 +42,44 @@ def get_detections(image):
         normalized_image, scalefactor=1 / 255, size=(640, 640), swapRB=True
     )
     model.setInput(blob)
-    outputs = model.forward()
-
-    outputs = numpy.array([cv2.transpose(outputs[0])])
-    rows = outputs.shape[1]
+    outputs = model.forward()[0].T
 
     boxes = []
     scores = []
     class_ids = []
 
-    for idx in range(rows):
-        classes_scores = outputs[0][idx][4:]
-        (_, maxScore, _, (_, maxClassIndex)) = cv2.minMaxLoc(classes_scores)
-        if maxScore >= 0.25:
+    for output in outputs:
+        classes_scores = output[4:]
+        (_, max_score, _, (_, max_class_id)) = cv2.minMaxLoc(classes_scores)
+        if max_score >= 0.25:
+            # Bounding box in normalized x, y, w, h format
             nxywh = [
-                outputs[0][idx][0] - (0.5 * outputs[0][idx][2]),
-                outputs[0][idx][1] - (0.5 * outputs[0][idx][3]),
-                outputs[0][idx][2],
-                outputs[0][idx][3],
+                output[0] - (0.5 * output[2]),
+                output[1] - (0.5 * output[3]),
+                output[2],
+                output[3],
             ]
             boxes.append(nxywh)
-            scores.append(maxScore)
-            class_ids.append(maxClassIndex)
+            scores.append(max_score)
+            class_ids.append(max_class_id)
 
-    result_boxes = cv2.dnn.NMSBoxes(boxes, scores, 0.25, 0.45, 0.5)
+    indices = cv2.dnn.NMSBoxes(boxes, scores, conf, 0.45, 0.5)
 
     detections = []
-    for idx in range(len(result_boxes)):
-        index = result_boxes[idx]
+    for index in indices:
         nxywh = boxes[index]
         x0 = int(nxywh[0] * scale)
         y0 = int(nxywh[1] * scale)
         x1 = int((nxywh[0] + nxywh[2]) * scale)
         y1 = int((nxywh[1] + nxywh[3]) * scale)
+
+        # Bounding box in x, y, x, y (top left, bottom right corner) format
+        bbox = (x0, y0, x1, y1)
         detection = {
-            "class_id": class_ids[index],
             "class_name": CLASSES[class_ids[index]],
             "confidence": scores[index],
-            "bounding_box": (x0, y0, x1, y1),
-            "scale": scale,
+            "bounding_box": bbox,
         }
         detections.append(detection)
-        draw_bounding_box(
-            image,
-            class_ids[index],
-            scores[index],
-            x0,
-            y0,
-            x1,
-            y1,
-        )
-
-    cv2.imshow("image", image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
     return detections

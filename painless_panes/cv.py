@@ -3,11 +3,7 @@ from typing import List, Tuple
 import cv2  # opencv
 import numpy
 
-from painless_panes import util
-
-# Read model info from painless_panes/model
-MODEL_FILE_PATH = util.file_path("painless_panes.model", "model.onnx")
-CLASSES_FILE_CONTENTS = util.file_contents("painless_panes.model", "classes.txt")
+from painless_panes import model
 
 # Module constants
 BLUE = (255, 0, 0)  # annotation color
@@ -15,12 +11,6 @@ GREEN = (0, 255, 0)  # annotation color
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 ARUCO_PARAMS = cv2.aruco.DetectorParameters()
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-MODEL = cv2.dnn.readNetFromONNX(MODEL_FILE_PATH)
-CLASS_NAMES = CLASSES_FILE_CONTENTS.splitlines()
-
-# TESTING
-LAYER_NAMES = MODEL.getLayerNames()
-OUTPUT_LAYERS = [LAYER_NAMES]
 
 
 def measure_window(
@@ -41,7 +31,7 @@ def measure_window(
     print("Aruco corners:", aruco_corners)
 
     # Find the model detections (windows)
-    detections = find_model_detections(image, annotate=False)
+    detections = model.get_detections(image)
     print("All detections:", detections)
 
     # Select the central detection
@@ -95,50 +85,6 @@ def find_aruco_marker(image: numpy.ndarray, annotate: bool = False) -> numpy.nda
         annotate_line(image, corners)
 
     return corners
-
-
-def find_model_detections(image: numpy.ndarray, annotate: bool = False) -> List[dict]:
-    """Find the YOLO model detections in an image
-
-    :param image: The image
-    :type image: numpy.ndarray
-    :param annotate: Annotate the image file as a side-effect?, defaults to False
-    :type annotate: bool, optional
-    :returns: The list of detections, in the form:
-        [
-            {
-                "class_name": <string>,   # The object class name
-                "confidence": <float>,    # The % confidence in the detection
-                "bounding_box": <tuple>,  # The bounding box in xyxy format
-            },
-            ...
-        ]
-    :rtype: List[dict]
-    """
-    # Convert RGB => BGR for prediction
-    bgr_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = MODEL.predict(bgr_image, conf=0.2, project=".")
-
-    detections = []
-    for result in results:
-        for box in result.boxes:
-            class_id = int(box.cls)
-            class_name = CLASS_NAMES[class_id]
-            conf = float(box.conf)
-            bbox = tuple(map(int, box.xyxy[0]))
-            detections.append(
-                {
-                    "class_name": class_name,
-                    "confidence": conf,
-                    "bounding_box": bbox,
-                }
-            )
-
-            if annotate:
-                text = f"{class_name} {conf:.2f}"
-                annotate_rectangle(image, bbox, text=text)
-
-    return detections
 
 
 # Selectors
