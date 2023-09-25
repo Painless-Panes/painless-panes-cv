@@ -6,38 +6,15 @@ authors = ["Andreas Copan <avcopan@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.12"
-icrawler = "^0.6.7"
-six = "^1.16.0"
-requests = "^2.31.0"
-pillow = "^10.0.1"
-bs4 = "^0.0.1"
-lxml = "^4.9.3"
-labelimg = "^1.8.6"
-torch = {version = "^2.0.1+cpu", source = "pytorch-cpu-src"}
-torchvision = {version = "^0.15.2+cpu", source = "pytorch-cpu-src"}
-torchaudio = {version = "^2.0.2+cpu", source = "pytorch-cpu-src"}
-ultralytics = "^8.0.180"
-opencv-python = "^4.8.0.76"
+python = ">=3.11,<3.13"
 opencv-contrib-python = "^4.8.0.76"
-tensorflow-cpu = "^2.13.0"
-onnx = "^1.14.1"
-onnx2tf = "^1.16.29"
-sng4onnx = "^1.0.1"
-onnxsim = "^0.4.33"
-tflite-support = "^0.4.4"
-onnxruntime = "^1.16.0"
-tensorflowjs = "^4.11.0"
+opencv-python = "^4.8.0.76"
+numpy = "^1.26.0"
 flask = "^2.3.3"
-python-dotenv = "^1.0.0"
-gunicorn = "^21.2.0"
 flask-cors = "^4.0.0"
+gunicorn = "^21.2.0"
+onnxruntime = "^1.16.0"
 
-
-[[tool.poetry.source]]
-name = "pytorch-cpu-src"
-url = "https://download.pytorch.org/whl/cpu"
-priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]

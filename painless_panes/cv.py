@@ -2,12 +2,11 @@ from typing import List, Tuple
 
 import cv2  # opencv
 import numpy
-import ultralytics as ul
 
 from painless_panes import util
 
 # Read model info from painless_panes/model
-MODEL_FILE_PATH = util.file_path("painless_panes.model", "model.pt")
+MODEL_FILE_PATH = util.file_path("painless_panes.model", "model.onnx")
 CLASSES_FILE_CONTENTS = util.file_contents("painless_panes.model", "classes.txt")
 
 # Module constants
@@ -16,8 +15,12 @@ GREEN = (0, 255, 0)  # annotation color
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 ARUCO_PARAMS = cv2.aruco.DetectorParameters()
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-MODEL = ul.YOLO(MODEL_FILE_PATH)
+MODEL = cv2.dnn.readNetFromONNX(MODEL_FILE_PATH)
 CLASS_NAMES = CLASSES_FILE_CONTENTS.splitlines()
+
+# TESTING
+LAYER_NAMES = MODEL.getLayerNames()
+OUTPUT_LAYERS = [LAYER_NAMES]
 
 
 def measure_window(
