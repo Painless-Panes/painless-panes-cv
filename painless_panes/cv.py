@@ -27,7 +27,7 @@ def measure_window(
     :rtype: Tuple[int, int, str]
     """
     # Find the aruco marker
-    aruco_corners = find_aruco_marker(image, annotate=annotate)
+    aruco_corners = find_aruco_corners(image, annotate=annotate)
     print("Aruco corners:", aruco_corners)
 
     # Find the model detections (windows)
@@ -57,7 +57,7 @@ def measure_window(
 
 
 # Finders
-def find_aruco_marker(image: numpy.ndarray, annotate: bool = False) -> numpy.ndarray:
+def find_aruco_corners(image: numpy.ndarray, annotate: bool = False) -> numpy.ndarray:
     """Find one aruco marker in an image
 
     Returns the first one found, if there is one
@@ -85,6 +85,82 @@ def find_aruco_marker(image: numpy.ndarray, annotate: bool = False) -> numpy.nda
         annotate_line(image, corners)
 
     return corners
+
+
+def find_window_corners(
+    image: numpy.ndarray, bbox: List[int], annotate: bool = False
+) -> numpy.ndarray:
+    """Find the corners of a window in an image
+
+    Returns the first one found, if there is one
+
+    :param image: The image
+    :type image: numpy.ndarray
+    :param bbox: A bounding box for the window
+    :type bbox: List[int]
+    :param annotate: Annotate the image file as a side-effect?, defaults to False
+    :type annotate: bool, optional
+    :return: The corner positions of the Aruco marker, in pixels:
+        [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+    :rtype: numpy.ndarray
+    """
+    image = image.copy()
+
+    # 1. Find all edges with canny edge detection
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image = cv2.GaussianBlur(image, (5, 5), 0)
+    all_edges = cv2.Canny(image, 30, 150)
+
+    # 2. Select edges within the bounding box
+    x0, y0, x1, y1 = bbox
+    edges = numpy.zeros_like(all_edges)
+    edges[y0:y1, x0:x1] = all_edges[y0:y1, x0:x1]
+
+    # 3. Detect straight lines among the edges
+    fld = cv2.ximgproc.createFastLineDetector()
+    lines = fld.detect(edges)
+    # image = fld.drawSegments(image, lines, linecolor=(0, 255, 0))
+
+    # 4. Find the longest
+
+
+def partition_lines_by_orientation(
+    lines: numpy.ndarray, vert_angle: float = 30
+) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    """Partition a set of lines by vertical and horizontal orientation
+
+    Partitions into vertical and horizontal lines based on a vertical angle cutoff
+
+    :param lines: The lines
+    :type lines: numpy.ndarray
+    :param vert_angle: Cutoff for identifying vertical lines, defaults to 30
+    :type vert_angle: float, optional
+    :return: The vertical lines, and the horizontal lines
+    :rtype: Tuple[numpy.ndarray, numpy.ndarray]
+    """
+    vlines = []
+    hlines = []
+
+    print(lines.shape)
+    print("LINES:")
+    for line in lines:
+        (lin,) = line
+        print(line)
+        # Calculate the angle
+        x, y = numpy.subtract(lin[2:], lin[:2])
+        ang = numpy.arctan(x / y)
+        # If the angle is near vertical, add it to `vlines`
+        if abs(ang) < vert_angle or abs(numpy.pi - ang) < vert_angle:
+            vlines.append(line)
+        # Otherwise, add it to `hlines`
+        else:
+            hlines.append(line)
+
+    vlines = numpy.array(vlines)
+    hlines = numpy.array(hlines)
+    print(vlines.shape)
+    print(hlines.shape)
+    return vlines, hlines
 
 
 # Selectors
