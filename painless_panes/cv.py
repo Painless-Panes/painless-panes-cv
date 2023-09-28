@@ -3,7 +3,6 @@ from typing import List, Tuple
 
 import cv2  # opencv
 import numpy
-import skimage.feature
 
 from painless_panes import model, util
 
@@ -107,77 +106,93 @@ def find_window_corners(
         [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
     :rtype: numpy.ndarray
     """
+    # 0. Define relative distances
     bx0, by0, bx1, by1 = bbox
     bwidth = bx1 - bx0
     bheight = by1 - by0
-    cx0 = bx0 + 0.1 * bwidth
-    cx1 = bx1 - 0.1 * bwidth
-    cy0 = by0 + 0.5 * bheight
-    cy1 = by1 - 0.5 * bheight
+    blength = min(bwidth, bheight)
 
-    # Define some helper data
-    edge_keys = {"t", "r", "b", "l"}
-    edge_nkey_dct = {"t": "rl", "b": "rl", "r": "tb", "l": "rb"}
-    corner_keys = {frozenset("tr"), frozenset("br"), frozenset("bl"), frozenset("tl")}
+    overhang_thresh = max(2, blength // 80)
 
-    edges = find_edges_in_bounding_box(image, bbox)
-    corners = find_corners_in_bounding_box(image, bbox)
-    corner_pool = corners.tolist()
+    #     a. Define inside margin, assuming vertical edges ar near the bounding box edge
+    mx0 = bx0 + 0.1 * bwidth
+    mx1 = bx1 - 0.1 * bwidth
+    my0 = by0 + 0.5 * bheight
+    my1 = by1 - 0.5 * bheight
 
-    # 7. Separate them into left- and right-sorted vertical lines and top- and
-    # bottom-sorted horizontal lines
-    vedges, hedges = partition_lines_by_orientation(edges)
+    #     a. Define outside padding
+    px0 = bx0 - 0.1 * bwidth
+    px1 = bx1 + 0.1 * bwidth
+    py0 = by0 - 0.1 * bheight
+    py1 = by1 + 0.1 * bheight
 
-    edge_idx_pool = {
-        "t": argsort_horizontal_lines(hedges, cutoff=cy0, reverse=False),
-        "r": argsort_vertical_lines(vedges, cutoff=cx1, reverse=True),
-        "b": argsort_horizontal_lines(hedges, cutoff=cy1, reverse=True),
-        "l": argsort_vertical_lines(vedges, cutoff=cx0, reverse=False),
+    # 1. Find lines of potential edges and points of potential corners inside the
+    # bounding box
+    edge_lines = find_lines_in_bounding_box(image, bbox)
+    # corner_points = find_possible_corner_points_in_bounding_box(image, bbox)
+
+    # 2. Find possible corner points for the top-left (tr), bottom-right (br), top-right
+    # (tr), and bottom-left (bl) corners, tracking the indices of their associated edges
+    edge_idxs_dct = {
+        # Vertical edges are sorted from the inner margin out, so inner edges come first
+        "l": argsort_vertical_lines_in_interval(edge_lines, start=mx0, end=bx0),
+        "r": argsort_vertical_lines_in_interval(edge_lines, start=mx1, end=bx1),
+        # Horizontal edges are sorted from the outside in, so outer edges come first
+        "t": argsort_horizontal_lines_in_interval(edge_lines, start=by0, end=my0),
+        "b": argsort_horizontal_lines_in_interval(edge_lines, start=by1, end=my1),
     }
 
-    for edge_key, edge_idxs in edge_idx_pool.items():
-        print(edge_key)
-        color = numpy.random.randint(0, 255, 3)
-        if edge_key in "tb":
-            edges = hedges[edge_idxs]
-        else:
-            edges = vedges[edge_idxs]
-        points_list = numpy.reshape(edges, (-1, 2, 2))
-        annotate_lines(image, points_list, color=color)
+    def _find_corner_points_with_edge_indices(corner_key):
+        edge1_key, edge2_key = corner_key
+        edge1_idxs = edge_idxs_dct[edge1_key]
+        edge2_idxs = edge_idxs_dct[edge2_key]
 
-    # for corner in corners:
-    #     cv2.circle(image, numpy.intp(corner), 1, color=RED, thickness=3)
+        pwes = []
+        for idx1, idx2 in itertools.product(edge1_idxs, edge2_idxs):
+            line1 = edge_lines[idx1]
+            line2 = edge_lines[idx2]
 
-    # # Cutoffs for vertical line positions (10% in from the bounding box frame)
-    # cx0 = bx0 + 0.1 * bwidth
-    # cx1 = bx1 - 0.1 * bwidth
+            # a. Find an intersection between these edges without overhang
+            point = util.line_pair_ray_intersection_no_overhang(
+                line1, line2, dist_thresh=overhang_thresh
+            )
+            if point is not None:
+                # b. Check that the point is within the padded bounding box
+                xint, yint = point
+                if px0 < xint < px1 and py0 < yint < py1:
+                    # c. If both checks pass, add it to the list of corner points
+                    pwe = (point, idx1, idx2)
+                    pwes.append(pwe)
 
-    # side_line1 = side_lines["r"].pop(0)
-    # side_line1 = side_lines["r"].pop(0)
-    # side_line2 = side_lines["b"].pop(0)
+        return pwes
 
-    # corner = util.line_pair_ray_intersection(side_line1, side_line2)
-    # annotate_line(image, numpy.reshape(side_line1, (-1, 2)), color=GREEN)
-    # annotate_line(image, numpy.reshape(side_line2, (-1, 2)), color=RED)
-    # cv2.circle(image, numpy.intp(corner), 5, color=BLUE, thickness=3)
+    tl_pwes = _find_corner_points_with_edge_indices("tl")
+    br_pwes = _find_corner_points_with_edge_indices("br")
+    tr_pwes = _find_corner_points_with_edge_indices("tr")
+    bl_pwes = _find_corner_points_with_edge_indices("bl")
 
-    # corners_list = []
-    # corners_iter = itertools.pairwise(itertools.cycle(side_keys))
-    # for side_key1, side_key2 in corners_iter:
-    #     print(side_key1, side_key2)
-    #     if not (side_lines[side_key1] and side_lines[side_key2]):
-    #         break
-    #     side_line1 = side_lines[side_key1].pop(0)
-    #     side_line2 = side_lines[side_key2].pop(0)
+    # 3. Find the first complete set of corners with matching edge indices
+    window_corners = None
+    corner_pwes_iter = itertools.product(tl_pwes, br_pwes, tr_pwes, bl_pwes)
+    for tl_pwe, br_pwe, tr_pwe, bl_pwe in corner_pwes_iter:
+        tl_point, tidx1, lidx1 = tl_pwe
+        br_point, bidx1, ridx1 = br_pwe
+        tr_point, tidx2, ridx2 = tr_pwe
+        bl_point, bidx2, lidx2 = bl_pwe
+        edges_match = (
+            tidx1 == tidx2 and lidx1 == lidx2 and bidx1 == bidx2 and ridx1 == ridx2
+        )
+        if edges_match:
+            window_corners = [tl_point, tr_point, br_point, bl_point]
+            break
 
-    # vpoints_list = numpy.reshape(vlines, (-1, 2, 2))
-    # hpoints_list = numpy.reshape(hlines, (-1, 2, 2))
-    # annotate_lines(image, vpoints_list, color=GREEN)
-    # annotate_lines(image, hpoints_list, color=RED)
-    return image
+    if annotate:
+        annotate_line(image, window_corners, color=RED)
+
+    return window_corners
 
 
-def find_edges_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.ndarray:
+def find_lines_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.ndarray:
     """Find lines that fall within a bounding box
 
     :param image: The image
@@ -193,12 +208,14 @@ def find_edges_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.n
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # 2. Read the bounding box corners and get its width
-    bx0, _, bx1, _ = bbox
+    bx0, by0, bx1, by1 = bbox
     bwidth = bx1 - bx0
+    bheight = by1 - by0
+    blength = min(bwidth, bheight)
 
     # 3. Detect straight lines
     fld = cv2.ximgproc.createFastLineDetector(
-        length_threshold=bwidth // 5,
+        length_threshold=blength // 5,
         do_merge=True,
     )
     lines = fld.detect(image_gray)
@@ -211,48 +228,12 @@ def find_edges_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.n
 
     # 6. Merge the lines by ray
     lines_groups = util.equivalence_partition(lines, util.lines_fall_on_common_ray)
-    lines = list(map(util.merge_lines, lines_groups))
+    lines = numpy.array(list(map(util.merge_lines, lines_groups)))
 
     return lines
 
 
-def find_corners_in_bounding_box(
-    image: numpy.ndarray, bbox: List[int]
-) -> numpy.ndarray:
-    """Find corners that fall within a bounding box
-
-    :param image: The image
-    :type image: numpy.ndarray
-    :param bbox: A window bounding box in xyxy format
-    :type bbox: List[int]
-    :returns: The corner points, as an N x 2 array
-    :rtype: numpy.ndarray
-    """
-
-    # 1. Convert to grayscale
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # 2. Read the bounding box corners and get its width
-    bx0, _, bx1, _ = bbox
-    bwidth = bx1 - bx0
-
-    # 3. Corner Harris generates a map where high values are likely to have a corner
-    block_size = max(2, bwidth // 40)
-    corner_map = cv2.cornerHarris(image_gray, blockSize=block_size, ksize=3, k=0.04)
-
-    # 4. Set low values to zero, clearing out small local maxima
-    corner_map[corner_map < 0.01 * corner_map.max()] = corner_map.min()
-
-    # 5. Identify remaining local maxima, which are likely to be corners
-    corners = skimage.feature.peak_local_max(corner_map.T, min_distance=5)
-
-    # 6. Select corners that fall within the bounding box
-    corners = select_points_in_bounding_box(corners, bbox)
-
-    return corners
-
-
-# Selectors
+# Sorters and Selectors
 def select_central_detection(
     image: numpy.ndarray, detections: List[dict], annotate: bool = False
 ) -> dict:
@@ -302,36 +283,6 @@ def select_central_detection(
     return central_detection
 
 
-def select_points_in_bounding_box(
-    points: numpy.ndarray,
-    bbox: numpy.ndarray,
-) -> numpy.ndarray:
-    """Select points that fall within a bounding box
-
-    :param points: The lines
-    :type points: numpy.ndarray
-    :param bbox: A bounding box in xyxy format
-    :type bbox: List[int]
-    :return: The points inside the bounding box
-    :rtype: numpy.ndarray
-    """
-    bx0, by0, bx1, by1 = bbox
-
-    print(points.shape)
-    xvals = points[:, 0]
-    yvals = points[:, 1]
-
-    in_bbox = (
-        numpy.greater_equal(xvals, bx0)
-        & numpy.less_equal(xvals, bx1)
-        & numpy.greater_equal(yvals, by0)
-        & numpy.less_equal(yvals, by1)
-    )
-
-    points_in_bbox = points[in_bbox]
-    return points_in_bbox
-
-
 def select_lines_in_bounding_box(
     lines: numpy.ndarray,
     bbox: numpy.ndarray,
@@ -347,8 +298,8 @@ def select_lines_in_bounding_box(
     """
     bx0, by0, bx1, by1 = bbox
 
-    xvals = lines[:, 0, 0::2]
-    yvals = lines[:, 0, 1::2]
+    xvals = numpy.squeeze(lines)[:, 0::2]
+    yvals = numpy.squeeze(lines)[:, 1::2]
 
     in_bbox = (
         numpy.all(numpy.greater_equal(xvals, bx0), 1)
@@ -365,7 +316,7 @@ def sort_lines_points(
     lines: numpy.ndarray,
     axis: str = "y",
 ) -> numpy.ndarray:
-    """Sort the two points for each lines along a particular axis
+    """Sort the two points for each line along a particular axis
 
     :param lines: The lines
     :type lines: numpy.ndarray
@@ -389,10 +340,102 @@ def sort_lines_points(
     return lines_out
 
 
-def partition_lines_by_orientation(
+def argsort_vertical_lines_in_interval(
+    lines: numpy.ndarray,
+    start: float,
+    end: float,
+    vert_angle: float = 30,
+) -> numpy.ndarray:
+    """Select indices for vertical lines within an x-interval and sort them
+
+    If `end` < `start`, the indices will be reverse-sorted
+
+    :param lines: The lines
+    :type lines: numpy.ndarray
+    :param start: Starting point of the sort/select interval, defaults to None
+    :type start: float, optional
+    :param end: Ending point of the sort/select interval, defaults to None
+    :type end: float, optional
+    :param vert_angle: Cutoff for identifying vertical lines, in degrees, defaults to 30
+    :type vert_angle: float, optional
+    :return: The sort indices
+    :rtype: numpy.ndarray
+    """
+    min_x_vals = numpy.min(numpy.squeeze(lines)[:, 0::2], axis=1)
+    max_x_vals = numpy.max(numpy.squeeze(lines)[:, 0::2], axis=1)
+
+    # Identify whether the range is reversed
+    reverse = end < start
+    if reverse:
+        start, end = end, start
+
+    # 1. Sort the indices by min/max x-value
+    if not reverse:
+        sort_idxs = list(numpy.argsort(min_x_vals, axis=0))
+    else:
+        sort_idxs = list(reversed(numpy.argsort(max_x_vals, axis=0)))
+
+    # 2. Filter out indices that are out of bounds
+    sort_idxs = [i for i in sort_idxs if min_x_vals[i] > start]
+    sort_idxs = [i for i in sort_idxs if max_x_vals[i] < end]
+
+    # 3. Filter out indices for non-vertical lines
+    vidxs, _ = argpartition_lines_by_orientation(lines, vert_angle=vert_angle)
+    vsort_idxs = [i for i in sort_idxs if i in vidxs]
+
+    return vsort_idxs
+
+
+def argsort_horizontal_lines_in_interval(
+    lines: numpy.ndarray,
+    start: float,
+    end: float,
+    vert_angle: float = 30,
+) -> numpy.ndarray:
+    """Select indices for horizontal lines within an x-interval and sort them
+
+    If `end` < `start`, the indices will be reverse-sorted
+
+    :param lines: The lines
+    :type lines: numpy.ndarray
+    :param start: Starting point of the sort/select interval, defaults to None
+    :type start: float, optional
+    :param end: Ending point of the sort/select interval, defaults to None
+    :type end: float, optional
+    :param vert_angle: Cutoff for identifying vertical lines, in degrees, defaults to 30
+    :type vert_angle: float, optional
+    :return: The sort indices
+    :rtype: numpy.ndarray
+    """
+    min_y_vals = numpy.min(numpy.squeeze(lines)[:, 1::2], axis=1)
+    max_y_vals = numpy.max(numpy.squeeze(lines)[:, 1::2], axis=1)
+
+    # Identify whether the range is reversed
+    reverse = end < start
+    if reverse:
+        start, end = end, start
+
+    # 1. Sort the indices by min/max x-value
+    if not reverse:
+        sort_idxs = list(numpy.argsort(min_y_vals, axis=0))
+    else:
+        sort_idxs = list(reversed(numpy.argsort(max_y_vals, axis=0)))
+
+    # 2. Filter out indices that are out of bounds
+    sort_idxs = [i for i in sort_idxs if min_y_vals[i] > start]
+    sort_idxs = [i for i in sort_idxs if max_y_vals[i] < end]
+
+    # 3. Filter out indices for non-horizontal lines
+    _, hidxs = argpartition_lines_by_orientation(lines, vert_angle=vert_angle)
+    hsort_idxs = [i for i in sort_idxs if i in hidxs]
+
+    return hsort_idxs
+
+
+def argpartition_lines_by_orientation(
     lines: numpy.ndarray, vert_angle: float = 30
 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
-    """Partition a set of lines by vertical and horizontal orientation
+    """Partition a set of line indices by vertical and horizontal orientation
 
     Partitions into vertical and horizontal lines based on a vertical angle cutoff
 
@@ -405,84 +448,19 @@ def partition_lines_by_orientation(
     """
     vert_angle *= numpy.pi / 180.0
 
-    vlines = []
-    hlines = []
+    vidxs = []
+    hidxs = []
 
-    for line in lines:
+    for idx, line in enumerate(lines):
         ang = util.line_angle(line)
-        # If the angle is near vertical, add it to `vlines`
+        # If the angle is near vertical, add it to the vertical index list
         if abs(ang) < vert_angle or abs(numpy.pi - ang) < vert_angle:
-            vlines.append(line)
-        # Otherwise, add it to `hlines`
+            vidxs.append(idx)
+        # Otherwise, add it to the horizontal index list
         else:
-            hlines.append(line)
+            hidxs.append(idx)
 
-    vlines = numpy.array(vlines)
-    hlines = numpy.array(hlines)
-
-    return vlines, hlines
-
-
-def argsort_vertical_lines(
-    vlines: numpy.ndarray, cutoff: float = None, reverse: bool = False
-) -> numpy.ndarray:
-    """Sort vertical lines by x-coordinates
-
-    :param vlines: The vertical lines
-    :type vlines: numpy.ndarray
-    :param cutoff: Drop lines past this cutoff, defaults to None
-    :type cutoff: float, optional
-    :param reverse: Reverse the sort order?, defaults to False
-    :type reverse: bool, optional
-    :return: The sorted lines
-    :rtype: numpy.ndarray
-    """
-    min_x_vals = numpy.min(numpy.squeeze(vlines)[:, 0::2], axis=1)
-    max_x_vals = numpy.max(numpy.squeeze(vlines)[:, 0::2], axis=1)
-
-    if not reverse:
-        vsort_idxs = numpy.argsort(min_x_vals, axis=0)
-        vsort_idxs = list(vsort_idxs)
-        if cutoff is not None:
-            vsort_idxs = [i for i in vsort_idxs if max_x_vals[i] < cutoff]
-    else:
-        vsort_idxs = numpy.argsort(max_x_vals, axis=0)
-        vsort_idxs = list(reversed(vsort_idxs))
-        if cutoff is not None:
-            vsort_idxs = [i for i in vsort_idxs if min_x_vals[i] > cutoff]
-
-    return vsort_idxs
-
-
-def argsort_horizontal_lines(
-    hlines: numpy.ndarray, cutoff: float = None, reverse: bool = False
-) -> numpy.ndarray:
-    """Sort horizontal lines by y-coordinates
-
-    :param lines: The lines
-    :type lines: numpy.ndarray
-    :param cutoff: Drop lines past this cutoff, defaults to None
-    :type cutoff: float, optional
-    :param reverse: Reverse the sort order?, defaults to False
-    :type reverse: bool, optional
-    :return: The sorted lines
-    :rtype: numpy.ndarray
-    """
-    min_y_vals = numpy.min(numpy.squeeze(hlines)[:, 1::2], axis=1)
-    max_y_vals = numpy.max(numpy.squeeze(hlines)[:, 1::2], axis=1)
-
-    if not reverse:
-        hsort_idxs = numpy.argsort(min_y_vals, axis=0)
-        hsort_idxs = list(hsort_idxs)
-        if cutoff is not None:
-            hsort_idxs = [i for i in hsort_idxs if max_y_vals[i] < cutoff]
-    else:
-        hsort_idxs = numpy.argsort(max_y_vals, axis=0)
-        hsort_idxs = list(reversed(hsort_idxs))
-        if cutoff is not None:
-            hsort_idxs = [i for i in hsort_idxs if min_y_vals[i] > cutoff]
-
-    return hsort_idxs
+    return vidxs, hidxs
 
 
 # Properties

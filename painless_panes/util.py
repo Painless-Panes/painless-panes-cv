@@ -241,6 +241,68 @@ def merge_lines(lines: numpy.ndarray) -> Tuple[float, float, float, float]:
     return tuple(end_points)
 
 
+def line_pair_ray_intersection_no_overhang(
+    line1: numpy.ndarray,
+    line2: numpy.ndarray,
+    dist_thresh: int = 2,
+) -> Tuple[float, float]:
+    """Find the intersection of the rays extending from a pair of lines, returning
+    `None` if there is an overhang
+
+    Intersections without overhang are included:
+          ______             ______
+                            |
+        |             or    |
+        |                   |
+
+    Intersections with overhang are not included:
+
+      __|______
+        |
+        |
+
+    :param line1: The first line
+    :type line1: numpy.ndarray
+    :param line2: The second line
+    :type line2: numpy.ndarray
+    :param dist_thresh: The pixel distance threshold of allowed overhang, defaults to 2
+    :type dist_thresh: int, optional
+    :return: The x, y coordinates of the intersection point
+    :rtype: Tuple[float, float]
+    """
+    xint, yint = line_pair_ray_intersection(line1, line2)
+
+    def _line_overhang(line):
+        x0, y0, x1, y1 = numpy.squeeze(line)
+
+        # Sort the line bounds
+        bx0, bx1 = sorted([x0, x1])
+        by0, by1 = sorted([y0, y1])
+
+        # Add a small amount of margin, in case of rounding error
+        bx0 -= dist_thresh / 10.0
+        by0 -= dist_thresh / 10.0
+        bx1 += dist_thresh / 10.0
+        by1 += dist_thresh / 10.0
+
+        # If the point lies on the line, the overhang is the minimum end point distance
+        if (bx0 < xint < bx1) and (by0 < yint < by1):
+            end_points = [(x0, y0), (x1, y1)]
+            overhang = min(line_length([xint, yint, x, y]) for x, y in end_points)
+        else:
+            overhang = 0
+
+        return overhang
+
+    overhang1 = _line_overhang(line1)
+    overhang2 = _line_overhang(line2)
+
+    if overhang1 > dist_thresh or overhang2 > dist_thresh:
+        return None
+
+    return xint, yint
+
+
 def line_pair_ray_intersection(
     line1: numpy.ndarray, line2: numpy.ndarray
 ) -> Tuple[float, float]:
@@ -274,8 +336,8 @@ def line_pair_ray_intersection(
 
     tan1 = numpy.tan(ang1)
     tan2 = numpy.tan(ang2)
-    cot1 = 1. / tan1
-    cot2 = 1. / tan2
+    cot1 = 1.0 / tan1
+    cot2 = 1.0 / tan2
 
     xint = (x2 * cot2 - x1 * cot1 - (y2 - y1)) / (cot2 - cot1)
     yint = (y2 * tan2 - y1 * tan1 - (x2 - x1)) / (tan2 - tan1)
