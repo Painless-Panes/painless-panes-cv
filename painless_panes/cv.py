@@ -463,6 +463,146 @@ def argpartition_lines_by_orientation(
     return vidxs, hidxs
 
 
+# Perspective
+def zigzag_sort_corners(
+    corners: List[Tuple[float, float]]
+) -> List[Tuple[float, float]]:
+    """Sort corners of a rectangle in zig-zag order for perspective transformation
+
+    :param corners: The corner points of a rectangle
+    :type corners: List[Tuple[float, float]]
+    :returns: The same corners, in zig-zag sort order
+    :rtype: List[Tuple[float, float]]
+    """
+    y_sorted_corners = sorted(corners, key=lambda c: c[1])
+    return sorted(y_sorted_corners[:2]) + sorted(y_sorted_corners[2:])
+
+
+def get_perspective_transformation_from_rectangle(
+    image: numpy.ndarray, corners: List[Tuple[float, float]]
+) -> Tuple[numpy.ndarray, int, int]:
+    """Get the perspective matrix from the corners of a rectangular object
+
+    Source: https://stackoverflow.com/q/38285229
+
+    :param image: _description_
+    :type image: numpy.ndarray
+    :param corners: The corners of a rectangle
+    :type corners: List[Tuple[float, float]]
+    :return: The perspective transformation matrix, and the image height and width
+    :rtype: Tuple[numpy.ndarray, int, int]
+    """
+    # 0. Find the original width, height and cener of the image
+    height0, width0, _ = image.shape
+    cx0 = width0 / 2
+    cy0 = height0 / 2
+
+    # 1. Sort the original corner points and store them in an array
+    c_rect0 = numpy.array(zigzag_sort_corners(corners), dtype=numpy.float32)
+
+    # 2. Calculate the apparent aspect ratio of the rectangle
+    w_rect0 = max(
+        util.line_length([*c_rect0[0], *c_rect0[1]]),
+        util.line_length([*c_rect0[2], *c_rect0[3]]),
+    )
+    h_rect0 = max(
+        util.line_length([*c_rect0[0], *c_rect0[2]]),
+        util.line_length([*c_rect0[1], *c_rect0[3]]),
+    )
+    apparent_ratio = w_rect0 / h_rect0
+
+    # 3. Calculate the focal disrance
+    m = numpy.ones((4, 3))
+    m[:, :2] = c_rect0
+    m0x3 = numpy.cross(m[0], m[3])
+    m1x3 = numpy.cross(m[1], m[3])
+    m2x3 = numpy.cross(m[2], m[3])
+    k1 = numpy.dot(m0x3, m[2]) / numpy.dot(m1x3, m[2])
+    k2 = numpy.dot(m0x3, m[1]) / numpy.dot(m2x3, m[1])
+
+    n1 = k1 * m[1] - m[0]
+    n2 = k2 * m[2] - m[0]
+
+    f = numpy.sqrt(
+        numpy.abs(
+            (1.0 / (n1[2] * n2[2]))
+            * (
+                (
+                    n1[0] * n2[0]
+                    - (n1[0] * n2[2] + n1[2] * n2[0]) * cx0
+                    + n1[2] * n2[2] * cx0 * cx0
+                )
+                + (
+                    n1[1] * n2[1]
+                    - (n1[1] * n2[2] + n1[2] * n2[1]) * cy0
+                    + n1[2] * n2[2] * cy0 * cy0
+                )
+            )
+        )
+    )
+
+    # 4. Calculate the real aspect ratio
+    A = numpy.array([[f, 0, cx0], [0, f, cy0], [0, 0, 1]])
+    At_inv = numpy.linalg.inv(A.T)
+    A_inv = numpy.linalg.inv(A)
+
+    true_ratio = numpy.sqrt(
+        numpy.dot(numpy.dot(numpy.dot(n1, At_inv), A_inv), n1)
+        / numpy.dot(numpy.dot(numpy.dot(n2, At_inv), A_inv), n2)
+    )
+
+    # 5. Define transformed rectangle corner based on its aspect ratio
+    if true_ratio < apparent_ratio:
+        w_rect = w_rect0
+        h_rect = w_rect / true_ratio
+    else:
+        h_rect = h_rect0
+        w_rect = true_ratio * h_rect
+
+    c_rect = numpy.array(
+        [[0, 0], [w_rect, 0], [0, h_rect], [w_rect, h_rect]], dtype=numpy.float32
+    )
+
+    # 6. Get the perspective transformation matrix for the rectangle
+    trans_rect = cv2.getPerspectiveTransform(c_rect0, c_rect)
+
+    # 7. Identify how this transforms the image corners
+    c_image0 = numpy.array(
+        [[0, 0], [width0, 0], [0, height0], [width0, height0]], dtype=numpy.float32
+    )
+    (c_image,) = cv2.perspectiveTransform(numpy.array([c_image0]), trans_rect)
+
+    # 8. Figure out how it needs to be cropped to fit a rectangle
+    crop_x0 = numpy.max(c_image[0::2, 0])
+    crop_x1 = numpy.min(c_image[1::2, 0])
+    crop_y0 = numpy.max(c_image[:2, 1])
+    crop_y1 = numpy.min(c_image[2:, 1])
+    c_crop = numpy.array(
+        [
+            [crop_x0, crop_y0],
+            [crop_x1, crop_y0],
+            [crop_x0, crop_y1],
+            [crop_x1, crop_y1],
+        ],
+        dtype=numpy.float32,
+    )
+
+    # 9. Inverse transform to find the crop corner points on the original image
+    trans_rect_inv = numpy.linalg.inv(trans_rect)
+    (c_crop0,) = cv2.perspectiveTransform(numpy.array([c_crop]), trans_rect_inv)
+
+    # 10. Now, remove negative values from the cropped image corners and get a new
+    # perspective transform that will include the full height and width
+    c_crop -= numpy.min(c_crop, axis=0)
+    trans_final = cv2.getPerspectiveTransform(c_crop0, c_crop)
+
+    # 11. Get the width and height of the cropped image
+    width_final = int(crop_x1 - crop_x0)
+    height_final = int(crop_y1 - crop_y0)
+
+    return trans_final, width_final, height_final
+
+
 # Properties
 def measure_rectangle_dimensions_from_aruco(
     image: numpy.ndarray,
