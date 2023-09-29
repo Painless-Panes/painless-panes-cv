@@ -123,7 +123,7 @@ def measure_window_dimensions_from_aruco_marker(
 
         text = f"{width}x{height}"
         text_position = numpy.intp(numpy.add(tl_corner, [0, 20]))
-        cv2.putText(image, text, text_position, FONT, 0.4, RED, 1)
+        cv2.putText(image, text, text_position, FONT, 0.5, RED, 1)
 
     return width, height
 
@@ -190,8 +190,8 @@ def find_window_corners(
     overhang_thresh = max(2, blength // 80)
 
     #     a. Define inside margin, assuming vertical edges ar near the bounding box edge
-    mx0 = bx0 + 0.1 * bwidth
-    mx1 = bx1 - 0.1 * bwidth
+    mx0 = bx0 + 0.2 * bwidth
+    mx1 = bx1 - 0.2 * bwidth
     my0 = by0 + 0.5 * bheight
     my1 = by1 - 0.5 * bheight
 
