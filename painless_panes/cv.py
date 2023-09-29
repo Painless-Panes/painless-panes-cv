@@ -29,7 +29,7 @@ def measure_window(
     :rtype: Tuple[int, int, str]
     """
     # Find the aruco marker
-    aruco_corners = find_aruco_corners(image, annotate=annotate)
+    aruco_corners = find_aruco_corners(image)
     print("Aruco corners:", aruco_corners)
 
     # Find the model detections (windows)
@@ -37,25 +37,41 @@ def measure_window(
     print("All detections:", detections)
 
     # Select the central detection
-    detection = select_central_detection(image, detections, annotate=True)
+    detection = select_central_detection(image, detections)
     print("Central detection:", detection)
+
+    window_bbox = detection["bounding_box"]
+    window_corners = find_window_corners(image, window_bbox)
+    print("Window corners:", window_corners)
 
     # If no marker was found, return early with an error message
     if aruco_corners is None:
         return None, None, "No marker detected!"
 
     if detection is None:
-        return None, None, "No windows detected!"
+        return None, None, "No window detected!"
+
+    if window_corners is None:
+        return None, None, "Could not find window corners."
+
+    # Get the perspective transformation
+    image, (aruco_corners, window_corners) = align_image_perspective_on_rectangle(
+        image, window_corners, points_list=(aruco_corners, window_corners)
+    )
+
+    image, (aruco_corners, window_corners) = scale_perspective_to_square(
+        image, aruco_corners, points_list=(aruco_corners, window_corners)
+    )
 
     # If we have a marker and a detection, make the measurement
     bbox = detection["bounding_box"]
-    width, height = measure_rectangle_dimensions_from_aruco(
+    window_width, window_height = measure_rectangle_dimensions_from_aruco(
         image, bbox, aruco_corners, annotate=True
     )
 
-    print("Measured dimensions:", width, height)
+    print("Measured dimensions:", window_width, window_height)
 
-    return width, height, ""
+    return window_width, window_height, image, ""
 
 
 # Finders
@@ -75,12 +91,12 @@ def find_aruco_corners(image: numpy.ndarray, annotate: bool = False) -> numpy.nd
     corners_list, _, _ = cv2.aruco.detectMarkers(
         image, ARUCO_DICT, parameters=ARUCO_PARAMS
     )
-    corners_list = numpy.intp(corners_list)
+    corners_list = numpy.array(corners_list, dtype=numpy.float32)
 
     if not corners_list.size:
         return None
 
-    corners = corners_list[0]
+    corners = numpy.reshape(corners_list[0], (4, 2))
 
     # If requested, annotate the image as a side-effect
     if annotate:
@@ -474,23 +490,30 @@ def zigzag_sort_corners(
     :returns: The same corners, in zig-zag sort order
     :rtype: List[Tuple[float, float]]
     """
+    corners = numpy.array(corners).tolist()
     y_sorted_corners = sorted(corners, key=lambda c: c[1])
     return sorted(y_sorted_corners[:2]) + sorted(y_sorted_corners[2:])
 
 
-def get_perspective_transformation_from_rectangle(
-    image: numpy.ndarray, corners: List[Tuple[float, float]]
-) -> Tuple[numpy.ndarray, int, int]:
-    """Get the perspective matrix from the corners of a rectangular object
+def align_image_perspective_on_rectangle(
+    image: numpy.ndarray,
+    rect_corners: List[Tuple[float, float]],
+    points_list: List[List[Tuple[float, float]]] = (),
+) -> Tuple[numpy.ndarray, List[List[Tuple[float, float]]]]:
+    """Align the image perspective on a rectangular object, making it a perfect
+    rectangle
 
     Source: https://stackoverflow.com/q/38285229
 
-    :param image: _description_
+    :param image: The image
     :type image: numpy.ndarray
-    :param corners: The corners of a rectangle
-    :type corners: List[Tuple[float, float]]
-    :return: The perspective transformation matrix, and the image height and width
-    :rtype: Tuple[numpy.ndarray, int, int]
+    :param rect_corners: The corners of the rectangle on the image
+    :type rect_corners: List[Tuple[float, float]]
+    :param points_list: A list of lists of points to be transformed with the image,
+        defaults to ()
+    :type points_list: List[List[Tuple[float, float]]]
+    :return: The image, and the transformed points list
+    :rtype: Tuple[numpy.ndarray, List[List[Tuple[float, float]]]]
     """
     # 0. Find the original width, height and cener of the image
     height0, width0, _ = image.shape
@@ -498,7 +521,7 @@ def get_perspective_transformation_from_rectangle(
     cy0 = height0 / 2
 
     # 1. Sort the original corner points and store them in an array
-    c_rect0 = numpy.array(zigzag_sort_corners(corners), dtype=numpy.float32)
+    c_rect0 = numpy.array(zigzag_sort_corners(rect_corners), dtype=numpy.float32)
 
     # 2. Calculate the apparent aspect ratio of the rectangle
     w_rect0 = max(
@@ -600,10 +623,129 @@ def get_perspective_transformation_from_rectangle(
     width_final = int(crop_x1 - crop_x0)
     height_final = int(crop_y1 - crop_y0)
 
-    return trans_final, width_final, height_final
+    # 12. Transform the image
+    image_final = cv2.warpPerspective(image, trans_final, (width_final, height_final))
+
+    # 13. Transform the points list
+    points_list_final = []
+    for points in points_list:
+        (points_final,) = cv2.perspectiveTransform(numpy.array([points]), trans_final)
+        points_list_final.append(points_final)
+
+    return image_final, points_list_final
+
+
+def scale_perspective_to_square(
+    image: numpy.ndarray,
+    square_corners: List[Tuple[float, float]],
+    points_list: List[List[Tuple[float, float]]] = (),
+) -> Tuple[numpy.ndarray, List[List[Tuple[float, float]]]]:
+    """Align the image perspective on a rectangular object, making it a perfect
+    rectangle
+
+    Source: https://stackoverflow.com/q/38285229
+
+    :param image: The image
+    :type image: numpy.ndarray
+    :param square_corners: The corners of the rectangle on the image
+    :type square_corners: List[Tuple[float, float]]
+    :param points_list: A list of lists of points to be transformed with the image,
+        defaults to ()
+    :type points_list: List[List[Tuple[float, float]]]
+    :return: The image, and the transformed points list
+    :rtype: Tuple[numpy.ndarray, List[List[Tuple[float, float]]]]
+    """
+    square_corners = numpy.array(
+        zigzag_sort_corners(square_corners), dtype=numpy.float32
+    )
+
+    # Form vectors for each edge (top, bottom, left, right)
+    t_vec = square_corners[1] - square_corners[0]
+    b_vec = square_corners[3] - square_corners[2]
+    l_vec = square_corners[2] - square_corners[0]
+    r_vec = square_corners[3] - square_corners[1]
+
+    # Get average vertical (top, bottom) and horizontal (left, right) vectors
+    vx, vy = numpy.average([t_vec, b_vec], axis=0)
+    hx, hy = numpy.average([l_vec, r_vec], axis=0)
+
+    # Calculate a horizontal scale factor
+    fx = numpy.sqrt((vy**2 - hy**2) / (hx**2 - vx**2))
+
+    # Get the image corner points
+    height0, width0, _ = image.shape
+    c_image0 = numpy.array(
+        [[0, 0], [width0, 0], [0, height0], [width0, height0]], dtype=numpy.float32
+    )
+
+    # Apply the scale factor to get the corner points of a scaled image
+    height = height0
+    width = width0 * fx
+    c_image = numpy.array(
+        [[1, 1], [width, 1], [1, height], [width, height]], dtype=numpy.float32
+    )
+
+    # Get the horizontal scaling transformation
+    print("fx:", fx)
+    trans = cv2.getPerspectiveTransform(c_image0, c_image)
+    print("trans:", trans)
+
+    # Transform the image
+    image_out = cv2.warpPerspective(image, trans, (int(width), int(height)))
+
+    # 13. Transform the points list
+    points_list_out = []
+    for points in points_list:
+        (points_out,) = cv2.perspectiveTransform(numpy.array([points]), trans)
+        points_list_out.append(points_out)
+
+    return image_out, points_list_out
 
 
 # Properties
+def measure_window_dimensions_from_aruco_marker(
+    image: numpy.ndarray,
+    window_corners: List[Tuple[int, int]],
+    aruco_corners: List[Tuple[int, int]],
+    color: Tuple[int, int, int] = GREEN,
+) -> Tuple[int, int]:
+    """Measure the dimensions of the bounding box for a detection
+
+    Annotation does not draw the box, it only puts the measured dimensions on the image
+
+    :param image: The image
+    :type image: numpy.ndarray
+    :param xyxy: A pair of (x, y) pixel coordinates for the top left and bottom right
+        corners of the rectangle
+    :type xyxy: Tuple[int, int, int, int]
+    :param aruco_corners: The corners of the aruco marker
+    :type aruco_corners: List[Tuple[int, int]]
+    :param annotate: Annotate the image file as a side-effect?, defaults to False
+    :type annotate: bool, optional
+    :param color: The BGR annotation color
+    :type color: Tuple[int, int, int]
+    :return: The width and height in inches
+    :rtype: Tuple[int, int]
+    """
+    # 1. Get the pixel -> inches conversion from the Aruco marker perimeter, which is
+    # (4 x 15 cm) = 23.622 inches
+    perimeter = cv2.arcLength(aruco_corners, True)
+    px2in = 23.622 / perimeter
+
+    # 2. Get the rectangle height and width in inches
+    x0, y0, x1, y1 = xyxy
+
+    width = int((x1 - x0) * px2in)
+    height = int((y1 - y0) * px2in)
+
+    # Annotate
+    if annotate:
+        text = f"{width}x{height}"
+        cv2.putText(image, text, (x0, y0 + 20), FONT, 0.4, color, 1)
+
+    return width, height
+
+
 def measure_rectangle_dimensions_from_aruco(
     image: numpy.ndarray,
     xyxy: Tuple[int, int, int, int],
