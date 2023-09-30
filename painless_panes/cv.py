@@ -202,7 +202,7 @@ def find_window_corners(
     bheight = by1 - by0
     blength = min(bwidth, bheight)
 
-    overhang_thresh = max(2, blength // 80)
+    overhang_thresh = max(3, blength // 50)
 
     #     a. Define inside margin, assuming vertical edges ar near the bounding box edge
     mx0 = bx0 + 0.2 * bwidth
@@ -231,14 +231,6 @@ def find_window_corners(
         "t": argsort_horizontal_lines_in_interval(edge_lines, start=py0, end=my0),
         "b": argsort_horizontal_lines_in_interval(edge_lines, start=py1, end=my1),
     }
-
-    # for edge_key, edge_idxs in edge_idxs_dct.items():
-    #     print(edge_key)
-    #     color = numpy.random.randint(0, 255, 3)
-    #     for idx in edge_idxs:
-    #         edge_line = edge_lines[idx]
-    #         edge_points = numpy.reshape(edge_line, (2, 2))
-    #         annotate_line(annotate, edge_points, color=color)
 
     def _find_corner_points_with_edge_indices(corner_key):
         edge1_key, edge2_key = corner_key
@@ -284,15 +276,12 @@ def find_window_corners(
             window_corners = [tl_point, tr_point, br_point, bl_point]
             window_corners_list.append(window_corners)
 
+    # For now, assume the best selection is the outermost corners
+    window_corners = window_corners_list[0]
+
     if annotate is None:
         annotate = image.copy()
 
-    # for window_corners in window_corners_list[:5]:
-    #     color = numpy.random.randint(0, 255, 3)
-    #     # print("window_corners:", window_corners)
-    #     annotate_line(annotate, window_corners, color=color)
-
-    window_corners = window_corners_list[0]
     annotate_line(annotate, window_corners, color=RED)
     return window_corners, annotate
 
