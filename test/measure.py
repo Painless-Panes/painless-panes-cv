@@ -1,8 +1,9 @@
 import cv2
 import painless_panes
 
-file_name = "example3.jpg"
-file_name = "example4.jpg"
+# file_name = "example2.jpg"      # wonky corners
+# file_name = "example3.jpg"    # lower corners
+file_name = "example4.jpg"    # no corners
 
 image = cv2.imread(f"original/{file_name}")
 height, width, _ = image.shape

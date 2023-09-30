@@ -9,6 +9,7 @@ from painless_panes import model, util
 # Module constants
 BLUE = (255, 0, 0)  # annotation color
 GREEN = (0, 255, 0)  # annotation color
+YELLOW = (0, 255, 255)  # annotation color
 RED = (0, 0, 255)  # annotation color
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 ARUCO_PARAMS = cv2.aruco.DetectorParameters()
@@ -26,10 +27,10 @@ def measure_window(image: numpy.ndarray) -> Tuple[int, int, numpy.ndarray, str]:
         error message, which is empty unless the measurement failed for some reason
     :rtype: Tuple[int, int, numpy.ndarray, str]
     """
-    image_copy = image.copy()
+    image_annotated = image.copy()
 
     # Find the aruco marker
-    aruco_corners = find_aruco_corners(image_copy, annotate=True)
+    aruco_corners, image_annotated = find_aruco_corners(image, annotate=image_annotated)
     print("Aruco corners:", aruco_corners)
 
     # Find the model detections (windows)
@@ -37,22 +38,28 @@ def measure_window(image: numpy.ndarray) -> Tuple[int, int, numpy.ndarray, str]:
     print("All detections:", detections)
 
     # Select the central detection
-    detection = select_central_detection(image_copy, detections, annotate=True)
+    detection, image_annotated = select_central_window(
+        image, detections, annotate=image_annotated
+    )
     print("Central detection:", detection)
-
-    window_bbox = detection["bounding_box"]
-    window_corners = find_window_corners(image, window_bbox)
-    print("Window corners:", window_corners)
 
     # If no marker was found, return early with an error message
     if aruco_corners is None:
-        return None, None, image_copy, "No marker detected!"
+        return None, None, image_annotated, "No marker detected!"
 
+    # If no window was found, return early withan error message
     if detection is None:
-        return None, None, image_copy, "No window detected!"
+        return None, None, image_annotated, "No window detected!"
+
+    print("Detection:", detection)
+    window_bbox = detection["bounding_box"]
+    window_corners, image_annotated = find_window_corners(
+        image, window_bbox, annotate=image_annotated
+    )
+    print("Window corners:", window_corners)
 
     if window_corners is None:
-        return None, None, image_copy, "Could not find window corners."
+        return None, None, image_annotated, "Could not find window corners."
 
     # These functions are supposed to correct for perspective skewing, but they make the
     # results less accurate, so I have commented them out and moved them to _archive.py
@@ -68,9 +75,12 @@ def measure_window(image: numpy.ndarray) -> Tuple[int, int, numpy.ndarray, str]:
     # )
 
     # If we have a marker and a detection, make the measurement
-    image_annotated = image.copy()
-    window_width, window_height = measure_window_dimensions_from_aruco_marker(
-        image_annotated, window_corners, aruco_corners, annotate=True
+    (
+        window_width,
+        window_height,
+        image_annotated,
+    ) = measure_window_dimensions_from_aruco_marker(
+        image, window_corners, aruco_corners, annotate=image_annotated
     )
 
     print("Measured dimensions:", window_width, window_height)
@@ -83,7 +93,7 @@ def measure_window_dimensions_from_aruco_marker(
     image: numpy.ndarray,
     window_corners: List[Tuple[int, int]],
     aruco_corners: List[Tuple[int, int]],
-    annotate: bool = False,
+    annotate: numpy.ndarray = None,
 ) -> Tuple[int, int]:
     """Measure the dimensions of the bounding box for a detection
 
@@ -95,8 +105,9 @@ def measure_window_dimensions_from_aruco_marker(
     :type window_corners: List[Tuple[int, int]]
     :param aruco_corners: The corners of an aruco marker
     :type aruco_corners: List[Tuple[int, int]]
-    :param annotate: Annotate the image file as a side-effect?, defaults to False
-    :type annotate: bool, optional
+    :param annotate: A copy of the image to be annotated; If `None`, a new copy created;
+        defaults to None
+    :type annotate: numpy.ndarray, optional
     :return: The width and height in inches
     :rtype: Tuple[int, int]
     """
@@ -116,28 +127,29 @@ def measure_window_dimensions_from_aruco_marker(
     height = int(numpy.average((l_len, r_len)) * px2in)
 
     # Annotate
-    if annotate:
-        annotate_line(image, aruco_corners, color=BLUE)
+    if annotate is None:
+        annotate = image.copy()
 
-        annotate_line(image, window_corners, color=RED)
+    text = f"{width}x{height}"
+    text_position = numpy.intp(numpy.add(tl_corner, [5, 20]))
+    cv2.putText(annotate, text, text_position, FONT, 0.6, RED, 2)
 
-        text = f"{width}x{height}"
-        text_position = numpy.intp(numpy.add(tl_corner, [0, 20]))
-        cv2.putText(image, text, text_position, FONT, 0.5, RED, 1)
-
-    return width, height
+    return width, height, annotate
 
 
 # Finders
-def find_aruco_corners(image: numpy.ndarray, annotate: bool = False) -> numpy.ndarray:
+def find_aruco_corners(
+    image: numpy.ndarray, annotate: numpy.ndarray = None
+) -> numpy.ndarray:
     """Find one aruco marker in an image
 
     Returns the first one found, if there is one
 
     :param image: The image
     :type image: numpy.ndarray
-    :param annotate: Annotate the image file as a side-effect?, defaults to False
-    :type annotate: bool, optional
+    :param annotate: A copy of the image to be annotated; If `None`, a new copy created;
+        defaults to None
+    :type annotate: numpy.ndarray, optional
     :return: The corner positions of the Aruco marker, in pixels:
         [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
     :rtype: numpy.ndarray
@@ -153,14 +165,16 @@ def find_aruco_corners(image: numpy.ndarray, annotate: bool = False) -> numpy.nd
     corners = numpy.reshape(corners_list[0], (4, 2))
 
     # If requested, annotate the image as a side-effect
-    if annotate:
-        annotate_line(image, corners)
+    if annotate is None:
+        annotate = image.copy()
 
-    return corners
+    annotate_line(annotate, corners)
+
+    return corners, annotate
 
 
 def find_window_corners(
-    image: numpy.ndarray, bbox: List[int], annotate: bool = False
+    image: numpy.ndarray, bbox: List[int], annotate: numpy.ndarray = None
 ) -> numpy.ndarray:
     """Find the corners of a window in an image
 
@@ -170,8 +184,9 @@ def find_window_corners(
     :type image: numpy.ndarray
     :param bbox: A window bounding box in xyxy format
     :type bbox: List[int]
-    :param annotate: Annotate the image file as a side-effect?, defaults to False
-    :type annotate: bool, optional
+    :param annotate: A copy of the image to be annotated; If `None`, a new copy created;
+        defaults to None
+    :type annotate: numpy.ndarray, optional
     :return: The window corner positions, in pixels:
         [
             [x1, y1],  # top-left corner
@@ -210,11 +225,11 @@ def find_window_corners(
     # (tr), and bottom-left (bl) corners, tracking the indices of their associated edges
     edge_idxs_dct = {
         # Vertical edges are sorted from the inner margin out, so inner edges come first
-        "l": argsort_vertical_lines_in_interval(edge_lines, start=mx0, end=bx0),
-        "r": argsort_vertical_lines_in_interval(edge_lines, start=mx1, end=bx1),
+        "l": argsort_vertical_lines_in_interval(edge_lines, start=px0, end=mx0),
+        "r": argsort_vertical_lines_in_interval(edge_lines, start=px1, end=mx1),
         # Horizontal edges are sorted from the outside in, so outer edges come first
-        "t": argsort_horizontal_lines_in_interval(edge_lines, start=by0, end=my0),
-        "b": argsort_horizontal_lines_in_interval(edge_lines, start=by1, end=my1),
+        "t": argsort_horizontal_lines_in_interval(edge_lines, start=py0, end=my0),
+        "b": argsort_horizontal_lines_in_interval(edge_lines, start=py1, end=my1),
     }
 
     def _find_corner_points_with_edge_indices(corner_key):
@@ -261,11 +276,14 @@ def find_window_corners(
             window_corners = [tl_point, tr_point, br_point, bl_point]
             break
 
-    if annotate:
-        print("window_corners:", window_corners)
-        annotate_line(image, window_corners, color=RED)
+    if annotate is None:
+        annotate = image.copy()
 
-    return window_corners
+    if window_corners is not None:
+        print("window_corners:", window_corners)
+        annotate_line(annotate, window_corners, color=RED)
+
+    return window_corners, annotate
 
 
 def find_lines_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.ndarray:
@@ -310,8 +328,8 @@ def find_lines_in_bounding_box(image: numpy.ndarray, bbox: List[int]) -> numpy.n
 
 
 # Sorters and Selectors
-def select_central_detection(
-    image: numpy.ndarray, detections: List[dict], annotate: bool = False
+def select_central_window(
+    image: numpy.ndarray, detections: List[dict], annotate: numpy.ndarray = None
 ) -> dict:
     """Select the detection closest to the center
 
@@ -327,36 +345,66 @@ def select_central_detection(
             ...
         ]
     :type detections: List[dict]
-    :param annotate: Annotate the image file as a side-effect?, defaults to False
-    :type annotate: bool, optional
+    :param annotate: A copy of the image to be annotated; If `None`, a new copy created;
+        defaults to None
+    :type annotate: numpy.ndarray, optional
     :returns: The central detection from the list
     :rtype: dict
     """
     if not detections:
         return None
 
+    if annotate is None:
+        annotate = image.copy()
+
     height, width, _ = image.shape
 
+    # Identify the detectin closest to he center
     center_point = numpy.intp([width // 2, height // 2])
     min_dist = numpy.inf
-    central_detection = None
-    for detection in detections:
-        x0, y0, x1, y1 = detection["bounding_box"]
-        corners = [[x0, y0], [x1, y1]]
+    central_idx = None
+    for idx, detection in enumerate(detections):
+        bbox = detection["bounding_box"]
+
+        corners = numpy.reshape(bbox, (2, 2))
         # Calculate the sum of the corner distances (relative to center)
         dist = sum(numpy.linalg.norm(numpy.subtract(p, center_point)) for p in corners)
         if dist < min_dist:
-            central_detection = detection
+            central_idx = idx
             min_dist = dist
 
-    if annotate:
-        class_name = central_detection["class_name"]
-        conf = central_detection["confidence"]
-        bbox = central_detection["bounding_box"]
-        text = f"{class_name} {conf:.2f}"
-        annotate_rectangle(image, bbox, text=text)
+        annotate_rectangle(annotate, bbox, color=YELLOW)
 
-    return central_detection
+    # Check for other detections vertically stacked above/below this one, which are
+    # likely to be part of the same window
+    central_window = detections[central_idx]
+    for idx, detection in enumerate(detections):
+        dx0, dy0, dx1, dy1 = detection["bounding_box"]
+        cx0, cy0, cx1, cy1 = central_window["bounding_box"]
+        cwidth = cx1 - cx0
+        cheight = cy1 - cy0
+
+        similar_x0 = abs(dx0 - cx0) < 0.1 * cwidth
+        similar_x1 = abs(dx1 - cx1) < 0.1 * cwidth
+        common_y_edge = abs(dy0 - cy1) < 0.2 * cheight or abs(dy1 - cy0) < 0.2 * cheight
+
+        # If this detection is vertically stacked above/below the central one, combine
+        # their bounding boxes
+        if similar_x0 and similar_x1 and common_y_edge:
+            central_window["bounding_box"] = (
+                min(dx0, cx0),
+                min(dy0, cy0),
+                max(dx1, cx1),
+                max(dy1, cy1),
+            )
+
+    class_name = central_window["class_name"]
+    conf = central_window["confidence"]
+    text = f"{class_name} {conf:.2f}"
+    bbox = central_window["bounding_box"]
+    annotate_rectangle(annotate, bbox, text=text, color=GREEN)
+
+    return central_window, annotate
 
 
 def select_lines_in_bounding_box(
@@ -601,4 +649,5 @@ def annotate_rectangle(
     cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
 
     if text is not None:
-        cv2.putText(image, text, (x0, y1 - 5), FONT, 0.4, color, 1)
+        position = (x0 + 5, y1 - 5)
+        cv2.putText(image, text, position, FONT, 0.6, color, 2)
