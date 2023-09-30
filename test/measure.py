@@ -1,11 +1,10 @@
 import cv2
 import painless_panes
 
-file_name = "example1.jpg"
-# file_name = "28w_34h_with_ar.png"
-# file_name = "28w_54h_with_ar.png"
-# file_name = "28w_54h_x2_with_ar.png"
-image = cv2.imread(file_name)
+file_name = "example3.jpg"
+file_name = "example4.jpg"
+
+image = cv2.imread(f"original/{file_name}")
 height, width, _ = image.shape
 
 width = int(width * 800 / height)
