@@ -160,7 +160,7 @@ def find_aruco_corners(
     corners_list = numpy.array(corners_list, dtype=numpy.float32)
 
     if not corners_list.size:
-        return None
+        return None, annotate
 
     corners = numpy.reshape(corners_list[0], (4, 2))
 
@@ -277,12 +277,17 @@ def find_window_corners(
             window_corners_list.append(window_corners)
 
     # For now, assume the best selection is the outermost corners
-    window_corners = window_corners_list[0]
+    if window_corners_list:
+        window_corners = window_corners_list[0]
+    # If the corner detection fails, fall back on using the bounding box
+    else:
+        window_corners = [[bx0, by0], [bx1, by0], [bx1, by1], [bx0, by1]]
 
     if annotate is None:
         annotate = image.copy()
 
     annotate_line(annotate, window_corners, color=RED)
+
     return window_corners, annotate
 
 
@@ -352,7 +357,7 @@ def select_central_window(
     :rtype: dict
     """
     if not detections:
-        return None
+        return None, annotate
 
     if annotate is None:
         annotate = image.copy()
@@ -387,10 +392,10 @@ def select_central_window(
         similar_x0 = abs(dx0 - cx0) < 0.1 * cwidth
         similar_x1 = abs(dx1 - cx1) < 0.1 * cwidth
         common_y_edge = (
-            abs(dy0 - cy0) < 0.1 * cheight or
-            abs(dy1 - cy1) < 0.1 * cheight or
-            abs(dy0 - cy1) < 0.2 * cheight or
-            abs(dy1 - cy0) < 0.2 * cheight
+            abs(dy0 - cy0) < 0.1 * cheight
+            or abs(dy1 - cy1) < 0.1 * cheight
+            or abs(dy0 - cy1) < 0.2 * cheight
+            or abs(dy1 - cy0) < 0.2 * cheight
         )
 
         # If this detection is vertically stacked above/below the central one, combine
