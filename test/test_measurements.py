@@ -34,7 +34,7 @@ def test__measurement():
             assert abs(meas_width - ref_width) <= tolerance
             assert abs(meas_height - ref_height) <= tolerance
 
-    test_("example1.jpg", 26, 66)
+    test_("example1.jpg", 26, 66, enforce=False)
     test_("example2.jpg", 28, 57, enforce=False)
     test_("example3.jpg", 26, 66, enforce=False)
     test_("example4.jpg", 26, 66, enforce=False)

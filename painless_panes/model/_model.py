@@ -5,7 +5,7 @@ import numpy
 
 from painless_panes import util
 
-MODEL_FILE_PATH = util.file_path("painless_panes.model", "model.onnx")
+MODEL_FILE_PATH = util.file_path("painless_panes.model", "window-model-nano-v2.onnx")
 CLASSES = util.file_contents("painless_panes.model", "classes.txt").splitlines()
 
 

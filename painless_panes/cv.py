@@ -207,8 +207,8 @@ def find_window_corners(
     #     a. Define inside margin, assuming vertical edges ar near the bounding box edge
     mx0 = bx0 + 0.2 * bwidth
     mx1 = bx1 - 0.2 * bwidth
-    my0 = by0 + 0.5 * bheight
-    my1 = by1 - 0.5 * bheight
+    my0 = by0 + 0.3 * bheight
+    my1 = by1 - 0.3 * bheight
 
     #     a. Define outside padding
     px0 = bx0 - 0.1 * bwidth
@@ -231,6 +231,14 @@ def find_window_corners(
         "t": argsort_horizontal_lines_in_interval(edge_lines, start=py0, end=my0),
         "b": argsort_horizontal_lines_in_interval(edge_lines, start=py1, end=my1),
     }
+
+    # for edge_key, edge_idxs in edge_idxs_dct.items():
+    #     print(edge_key)
+    #     color = numpy.random.randint(0, 255, 3)
+    #     for idx in edge_idxs:
+    #         edge_line = edge_lines[idx]
+    #         edge_points = numpy.reshape(edge_line, (2, 2))
+    #         annotate_line(annotate, edge_points, color=color)
 
     def _find_corner_points_with_edge_indices(corner_key):
         edge1_key, edge2_key = corner_key
@@ -262,7 +270,7 @@ def find_window_corners(
     bl_pwes = _find_corner_points_with_edge_indices("bl")
 
     # 3. Find the first complete set of corners with matching edge indices
-    window_corners = None
+    window_corners_list = []
     corner_pwes_iter = itertools.product(tl_pwes, br_pwes, tr_pwes, bl_pwes)
     for tl_pwe, br_pwe, tr_pwe, bl_pwe in corner_pwes_iter:
         tl_point, tidx1, lidx1 = tl_pwe
@@ -274,15 +282,18 @@ def find_window_corners(
         )
         if edges_match:
             window_corners = [tl_point, tr_point, br_point, bl_point]
-            break
+            window_corners_list.append(window_corners)
 
     if annotate is None:
         annotate = image.copy()
 
-    if window_corners is not None:
-        print("window_corners:", window_corners)
-        annotate_line(annotate, window_corners, color=RED)
+    # for window_corners in window_corners_list[:5]:
+    #     color = numpy.random.randint(0, 255, 3)
+    #     # print("window_corners:", window_corners)
+    #     annotate_line(annotate, window_corners, color=color)
 
+    window_corners = window_corners_list[0]
+    annotate_line(annotate, window_corners, color=RED)
     return window_corners, annotate
 
 
@@ -386,7 +397,12 @@ def select_central_window(
 
         similar_x0 = abs(dx0 - cx0) < 0.1 * cwidth
         similar_x1 = abs(dx1 - cx1) < 0.1 * cwidth
-        common_y_edge = abs(dy0 - cy1) < 0.2 * cheight or abs(dy1 - cy0) < 0.2 * cheight
+        common_y_edge = (
+            abs(dy0 - cy0) < 0.1 * cheight or
+            abs(dy1 - cy1) < 0.1 * cheight or
+            abs(dy0 - cy1) < 0.2 * cheight or
+            abs(dy1 - cy0) < 0.2 * cheight
+        )
 
         # If this detection is vertically stacked above/below the central one, combine
         # their bounding boxes
@@ -468,7 +484,7 @@ def argsort_vertical_lines_in_interval(
     lines: numpy.ndarray,
     start: float,
     end: float,
-    vert_angle: float = 30,
+    vert_angle: float = 20,
 ) -> numpy.ndarray:
     """Select indices for vertical lines within an x-interval and sort them
 
@@ -514,7 +530,7 @@ def argsort_horizontal_lines_in_interval(
     lines: numpy.ndarray,
     start: float,
     end: float,
-    vert_angle: float = 30,
+    vert_angle: float = 20,
 ) -> numpy.ndarray:
     """Select indices for horizontal lines within an x-interval and sort them
 
@@ -557,7 +573,7 @@ def argsort_horizontal_lines_in_interval(
 
 
 def argpartition_lines_by_orientation(
-    lines: numpy.ndarray, vert_angle: float = 30
+    lines: numpy.ndarray, vert_angle: float = 20
 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
     """Partition a set of line indices by vertical and horizontal orientation
 
