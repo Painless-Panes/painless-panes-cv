@@ -1,11 +1,11 @@
 # Painless Panes Computer Vision API
 
 Implements the computer vision API used by the [Painless
-Panes](https://github.com/avcopan/painless-panes) app.
+Panes](https://github.com/Painless-Panes/painless-panes) app.
 
 The window detection model used by this app can be reconstructed and/or improved using
 the scripts provided in the [Painless Panes
-Model](https://github.com/avcopan/painless-panes-model) repository.
+Model](https://github.com/Painless-Panes/painless-panes-model) repository.
 
 ## Features / Usage
 
@@ -20,7 +20,7 @@ frame).
 
 1. The window detection model works quite well for its size, but could be improved by
 using a larger model with more training data. See instructions in the [Painless Panes
-Model](https://github.com/avcopan/painless-panes-model) repository to update this model.
+Model](https://github.com/Painless-Panes/painless-panes-model) repository to update this model.
 2. The window corner-finding algorithm (`painless_panes/cv.py#find_window_corners`),
 which finds line intersections without overhang, works great some of the time, but is unreliable and probably a dead-end in the long-term.
 3. The current algorithm does nothing to correct for perspective. Some functions to
