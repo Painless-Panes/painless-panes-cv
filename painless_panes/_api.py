@@ -13,11 +13,32 @@ flask_cors.CORS(api, expose_headers="*")
 
 @api.route("/cv/api/ping", methods=["GET"])
 def ping():
+    """@api {get} /cv/api/ping Ping the server to make sure it is running
+
+    @apiSuccess {Object} If successful, sends a 200 code with the following content:
+        {"contents": "pong"}
+    """
     return {"contents": "pong"}, 200
 
 
 @api.route("/cv/api/window/measure", methods=["POST"])
 def measure_window():
+    """@api {post} /cv/api/window/measure Measure window dimensions from a photo
+
+    @apiBody {Blob} image The photo image file, as a blob
+
+    @apiSuccessHeader {String} width The measured width, in inches
+    @apiSuccessHeader {String} height The measured height, in inches
+    @apiSuccess {Blob} The annotated image file, as a Blob
+
+    Note: If the image was processed but the measurement was unsuccessful, this will
+    still return a 200 code. In this case, it will return a partially annotated image,
+    which may contain either the Aruco marker or the detected window, along with an
+    error message header.
+
+    @apiErrorHeader {String} error_message An error message
+    @apiError {Blob} The partially annotated image
+    """
     # Get the FileStorage object
     file_storage = flask.request.files["image"]
 
@@ -43,6 +64,4 @@ def measure_window():
     else:
         res.headers.add("error_message", error_message)
 
-    print("Headers added:", res.headers)
-
-    return res
+    return res, 200
