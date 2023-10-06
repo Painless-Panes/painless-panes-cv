@@ -8,7 +8,7 @@ import flask_cors
 from painless_panes import cv, util
 
 api = flask.Flask(__name__)
-flask_cors.CORS(api)
+flask_cors.CORS(api, expose_headers="*")
 
 
 @api.route("/cv/api/ping", methods=["GET"])
@@ -33,12 +33,16 @@ def measure_window():
 
     # Send the BytesIO object as a file, putting measurements in the headers
     annotated_bytes_io = util.bytes_io_from_opencv_image_array(annotated_image)
-    res = flask.send_file(annotated_bytes_io, mimetype="image/jpeg")
+    res = flask.make_response(
+        flask.send_file(annotated_bytes_io, mimetype="image/jpeg")
+    )
 
     if height is not None and width is not None:
         res.headers.add("width", width)
         res.headers.add("height", height)
     else:
         res.headers.add("error_message", error_message)
+
+    print("Headers added:", res.headers)
 
     return res
